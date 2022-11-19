@@ -19,9 +19,9 @@ def defect():
     serialcomm.close
 
 button_run = Button(root, text="Run Program", padx = 50, pady = 10, command=run, bg="green")
-button_run.grid(row=2, column=3)
+button_run.pack()
 
-button_defect = Button(root, text="Run Diagnostics", padx = 50, pady = 10, command=defect, bg="red")
-button_run.grid(row=5, column=3)
+button_defect = Button(root, text="Defect", padx = 45, pady = 10, command=defect, bg="red")
+button_defect.pack()
 
 root.mainloop()
