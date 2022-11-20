@@ -169,6 +169,7 @@ def detect_ball(frame) :
 
             serialcomm.write("run".encode('utf-8'))
             #time.sleep(0.5)
+            #petrus
             serialcomm.close
 
             return ball_img
