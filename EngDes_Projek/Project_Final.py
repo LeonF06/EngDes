@@ -55,25 +55,25 @@ def contour_detection(edge):
         print(" Area: ", contour_area, " Length: ", len(c))
 
         # Ball is detected
-        if (ball.detected == False and contour_area > 20000):
+        if (ball.detected == False and contour_area > 140000):
             print("Ball contour")
             ball.detected = True
             #cv2.drawContours(img_copy, [approx], 0, (255, 0, 255), 3)
             return 0, approx, contour_area
         # Ball is not found
-        elif (ball.detected == False and contour_area < 20000):
+        elif (ball.detected == False and contour_area < 140000):
             print("Not ball contour")
             return None, None, None
         # Blob is detected
-        elif (blob.detected == False and contour_area > 3500 and contour_area < 10000):
+        elif (blob.detected == False and contour_area > 33000 and contour_area < 65000):
             print("blob contour")
             blob.detected = True
             return 3, approx, contour_area
         # Defect is detected
-        elif (contour_area > 5 and contour_area < 3500 and is_closed(c) == True):
+        elif (contour_area > 5 and contour_area < 33000 and is_closed(c) == True):
             #ellipse = cv2.fitEllipse(c)
             print("defect contour")
-            if (intersect(c, ball.radius, ball.center) == False):
+            if (intersect(ball.outline, c) == False):
                 return 4, approx, contour_area
         else :
             continue
@@ -98,7 +98,7 @@ def is_closed(c):
 def ccw(A,B,C):
     return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
 
-'''# Function to determine if two contours intersect
+# Function to determine if two contours intersect
 def intersect(circle_cnt, refernce_cnt):
     for ref_idx in range(len(circle_cnt)-1):
     ## Create reference line_ref with point AB
@@ -114,36 +114,7 @@ def intersect(circle_cnt, refernce_cnt):
             if ccw(A,C,D) != ccw(B,C,D) and ccw(A,B,C) != ccw(A,B,D):
                 ## If true, break loop earlier
                 return True
-    return False'''
-
-# Function to determine if a countour intersects a circle
-def intersect(countour, radius, center):
-    for i in range(len(countour)-1):
-        A = countour[i][0]
-        B = countour[i+1][0]
-        if (np.linalg.norm(A-center) < radius and np.linalg.norm(B-center) < radius):
-            return True
     return False
-
-# Funtion to determine wether a contour is inside a circle
-def inside_circle(countour, radius, center):
-    for i in range(len(countour)):
-        A = countour[i][0]
-        if (np.linalg.norm(A-center) > radius):
-            return False
-    return True
-
-# Function to determine if a contour is inside another contour
-def is_inside(circle, contour):
-    print("Is in is_inside function")
-    for i in range(len(contour)):
-        if (cv2.pointPolygonTest(circle, contour[i][0], False) > 0):
-            print("Inside")
-            return True
-    print("Outside")      
-    return False
-    
-
 
 # Crop the image
 def crop_frame(gray, approx):
@@ -175,17 +146,17 @@ def is_orange(frame):
 ''''''''''''''''''' MAIN FUNCTION '''''''''''''''''''
 # Connect to the camera and get a frame
 cap = connect_camera()
-ball = Ball(None, None, None, None, False)
+ball = Ball(None, None, None, None, None, False)
 while (ball.detected == False):
     ret, frame = cap.read()
 
     # Determine wether the ball is orange or white
-    flag = is_orange(frame)
+    ball.colour = is_orange(frame)
 
     ''''''''''''''''''' BALL DETECTION '''''''''''''''''''
     # Convert the frame to grayscale and then to binary
     gray_img = convert_to_grayscale(frame)
-    thresh_img = threshold_frame(gray_img, 120) #190
+    thresh_img = threshold_frame(gray_img, 130) #190
 
     # Blur the frame and then perform edge detection
     blur_img = blur_frame(thresh_img, 3)
@@ -209,37 +180,44 @@ while (ball.detected == False):
     except :
         continue
 
+# Get the contour of the ball
+ball.detected = False
+blank_img = np.zeros(gray_img.shape, np.uint8)
+cv2.circle(blank_img, ball.center, ball.radius, (255,255,255), -1)
+edged_img = edge_detection(blank_img)
+state, ball_outline, ball_area = contour_detection(edged_img)
+ball.outline = ball_outline
+
+
 
 ''''''''''''''''''' BLOB DETECTION '''''''''''''''''''
-# Send the contour image through a averaging filter to merge the pixels
-
-#----------------test code----------------#
-'''ball_mask_img = mask_ball(gray_img, ball.center, ball.radius)
+# Mask the ball image
+ball_mask_img = mask_ball(gray_img, ball.center, ball.radius)
 ball_img = ball_mask_img.copy()
-#cv2.drawContours(ball_img, [ball.outline], 0, (255, 255, 255), 5)
-cv2.circle(ball_img, ball.center, ball.radius-1, (255,255,255), 3)
+
+# Make a white circle around the ball
+cv2.circle(ball_img, ball.center, ball.radius-1, (255,255,255), 10)
 # Add contrast to the image
-ball_img = cv2.addWeighted(ball_img, 1.5, ball_img, 0, 0)
+ball_img = cv2.addWeighted(ball_img, 2, ball_img, 0, 0)
 
-#----------------test code----------------#
-avg_img = average_frame(ball_img, 8)
-avg_img = cv2.equalizeHist(avg_img)
-# Make the back parts more black
-for i in range(5):
-    avg_img = average_frame(avg_img, 5)
-    # Add contrast to the avg_img
-    #avg_img = cv2.addWeighted(avg_img, 1.5, avg_img, 0, 0)
-    
-    #cv2.circle(avg_img, ball.center, ball.radius-1, (255,255,255), 3)
+# Send the contour image through a averaging filter to merge the pixels
+if (ball.colour == "White") :
+    avg_img = average_frame(ball_img, 18)
+    avg_img = cv2.equalizeHist(avg_img)
 
-# Convert the blurry frame to bianry
-binary_img = threshold_frame(avg_img, 230) #230
-#binary_img = crop_frame(binary_img, ball.outline)
+    for i in range(25):
+        avg_img = average_frame(avg_img, 3)
+        avg_img = threshold_frame(avg_img, 150) #230
+# Orange
+else:
+    avg_img = average_frame(ball_img, 18)
+    avg_img = cv2.equalizeHist(avg_img)
 
-#combined_img = cv2.bitwise_xor(binary_img, circle_img)
+    for i in range(70):
+        avg_img = average_frame(avg_img, 3)
+        avg_img = threshold_frame(avg_img, 160) #230
 
-# Combine the circle image and the binary image
-#combined_img = cv2.bitwise_or(binary_img, circle_img1)
+binary_img = avg_img.copy()
 
 # Edge detection and contour detection on the binary image
 test_img = frame.copy()
@@ -269,7 +247,6 @@ if (blob.detected == True):
             defect = Defect(defect_outline, defect_area)
             #test_img = ball_img.copy()
             cv2.drawContours(test_img, [defect.outline], 0, (255, 0, 255), 3)
-            #cv2.ellipse(test_img, defect.outline, (0, 0, 0), 3)
     except :
         print("No defects found")
     
@@ -286,12 +263,12 @@ else:
             #test_img = ball_img.copy()
             cv2.drawContours(test_img, [defect.outline], 0, (255, 0, 255), 3)
     except :
-        print("No defects found")'''
+        print("No defects found")
 
 
 
 
-cv2.imshow('frame', ball_img)
+cv2.imshow('frame', test_img)
 cv2.waitKey(0)
 cap.release()
 cv2.destroyAllWindows()

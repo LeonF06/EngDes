@@ -4,6 +4,7 @@ import sys
 import numpy as np
 from matplotlib import pyplot as plt
 from Class import *
+import time
 
 
 
@@ -33,6 +34,15 @@ def edge_detection(gray):
     edged = cv2.Canny(gray, 10, 250)
     return edged
 
+# Function to create a circular mask
+def mask_ball(gray, center, radius):
+    mask = np.zeros(gray.shape, np.uint8)
+    cv2.circle(mask, center, radius, 255, -1)
+    masked = cv2.bitwise_and(gray, gray, mask=mask)
+    # make the background white
+    masked[mask == 0] = 255
+    return masked
+
 # Contour detection function
 def contour_detection(edge):
     contours = cv2.findContours(edge, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -46,38 +56,27 @@ def contour_detection(edge):
         print(" Area: ", contour_area, " Length: ", len(c))
 
         # Ball is detected
-        if (ball.detected == False and contour_area > 20000):
+        if (ball.detected == False and contour_area > 140000):
             print("Ball contour")
             ball.detected = True
             #cv2.drawContours(img_copy, [approx], 0, (255, 0, 255), 3)
             return 0, approx, contour_area
         # Ball is not found
-        elif (ball.detected == False and contour_area < 20000):
-            print("Not ball contour")
-            return None, None, None
-        # Inner circle is detected
-        elif (inner_circle.detected == False and contour_area > 17000 and contour_area < 20000 and is_closed(c) == True):
-            print("inner circle contour")
-            inner_circle.detected = True
-            return 1, approx, contour_area
-        # Small circle is detected
-        elif (small_circle.detected == False and contour_area > 14000 and contour_area < 17000 and is_closed(c) == True):
-            print("small circle contour")
-            small_circle.detected = True
-            return 2, approx, contour_area
+        elif (ball.detected == False and contour_area < 140000):
+                print("Not ball contour")
+                return None, None, None
         # Blob is detected
-        elif (blob.detected == False and contour_area > 3500 and contour_area < 10000 and is_closed(c) == True):
+        elif (blob.detected == False and contour_area > 20000 and contour_area < 65000):
             print("blob contour")
             blob.detected = True
             return 3, approx, contour_area
         # Defect is detected
-        elif (contour_area > 5 and contour_area < 3500 and is_closed(c) == True):
+        elif (contour_area > 100 and contour_area < 20000 and is_closed(c) == True):
             #ellipse = cv2.fitEllipse(c)
             print("defect contour")
-            if (intersect(c, small_circle.outline) == False):
+            if (intersect(ball.outline, c) == False):
                 return 4, approx, contour_area
         else :
-            print("No contour")
             continue
             
 
@@ -127,129 +126,178 @@ def average_frame(gray, size):
     avg = cv2.blur(gray, (size, size))
     return avg
 
+# Function to determine wether the ball is orange or white
+def is_orange(frame):
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    lower_orange = np.array([0, 100, 250])
+    upper_orange = np.array([15, 255, 255])
+    mask = cv2.inRange(hsv, lower_orange, upper_orange)
+    res = cv2.bitwise_and(frame, frame, mask=mask)
+    if (np.sum(res) > 0):
+        return True
+    else:
+        return False
+
+# Function to detect the ball
+def detect_ball(frame) :
+
+    # Determine wether the ball is orange or white
+    ball.colour = is_orange(frame)
+
+    ''''''''''''''''''' BALL DETECTION '''''''''''''''''''
+    # Convert the frame to grayscale and then to binary
+    gray_img = convert_to_grayscale(frame)
+    thresh_img = threshold_frame(gray_img, 130) #190
+
+    # Blur the frame and then perform edge detection
+    blur_img = blur_frame(thresh_img, 3)
+    edged_img = edge_detection(blur_img)
+
+    # Detect and draw the contours and isolate the ball
+    try :
+        state, ball_outline, ball_area = contour_detection(edged_img)
+        if state == 0 :
+            print("Found the ball")
+
+            (x,y),radius = cv2.minEnclosingCircle(ball_outline)
+            ball.center = (int(x),int(y))
+            ball.radius = int(radius)
+
+            ball.area = ball_area
+            #ball_img = crop_frame(gray_img, ball.outline)
+            ball_img = cv2.circle(frame, ball.center, ball.radius, (0,255,0), 2)
+            return ball_img
+        else :
+            return None
+    except :
+        return None
 
 
-''''''''''''''''''''''''' MAIN FUNCTION '''''''''''''''''''''''''
-cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
-while cap.isOpened():
-    ret, frame = cap.read()
-    if ret:
-        ''''''''''''''''''' BALL DETECTION '''''''''''''''''''
-        # Convert the frame to grayscale and then to binary
-        gray_img = convert_to_grayscale(frame)
-        thresh_img = threshold_frame(gray_img, 180) #190
 
-        # Blur the frame and then perform edge detection
-        blur_img = blur_frame(thresh_img, 3)
-        edged_img = edge_detection(blur_img)
+def analyze_frame(ball_img, ball, blob):
 
-        # Detect and draw the contours and isolate the ball
-        ball = Ball(None, None, False)
-        blob = Blob(None, None, False)
+    # Get the contour of the ball
+    ball.detected = False
+    gray_img = convert_to_grayscale(ball_img)
+    blank_img = np.zeros(gray_img.shape, np.uint8)
+    cv2.circle(blank_img, ball.center, ball.radius, (255,255,255), -1)
+    edged_img = edge_detection(blank_img)
+    state, ball_outline, ball_area = contour_detection(edged_img)
+    ball.outline = ball_outline
+
+
+
+    ''''''''''''''''''' BLOB DETECTION '''''''''''''''''''
+    # Mask the ball image
+    ball_mask_img = mask_ball(gray_img, ball.center, ball.radius)
+    ball_img = ball_mask_img.copy()
+
+    # Make a white circle around the ball
+    cv2.circle(ball_img, ball.center, ball.radius-1, (255,255,255), 10)
+    # Add contrast to the image
+    ball_img = cv2.addWeighted(ball_img, 2, ball_img, 0, 0)
+
+    # Send the contour image through a averaging filter to merge the pixels
+    if (ball.colour == "White") :
+        avg_img = average_frame(ball_img, 20)
+        avg_img = cv2.equalizeHist(avg_img)
+
+        for i in range(25):
+            avg_img = average_frame(avg_img, 3)
+            avg_img = threshold_frame(avg_img, 150) #230
+    # Orange
+    else:
+        avg_img = average_frame(ball_img, 18)
+        avg_img = cv2.equalizeHist(avg_img)
+
+        for i in range(70):
+            avg_img = average_frame(avg_img, 3)
+            avg_img = threshold_frame(avg_img, 170) #230
+
+    binary_img = avg_img.copy()
+
+    # Edge detection and contour detection on the binary image
+    test_img = frame.copy()
+    cv2.circle(test_img, ball.center, ball.radius, (0,0,0), 1)
+    edged_img = edge_detection(binary_img)
+    cv2.circle(binary_img, ball.center, ball.radius, (0,0,0), 1)
+    try:
+        state, blob_outline, blob_area = contour_detection(edged_img)
+        if (state == 3):
+            print("Found the blob")
+            blob.outline = blob_outline
+            blob.area = blob_area
+            cv2.drawContours(test_img, [blob.outline], 0, (0, 0, 0), 3)
+    except:
+        print("Blob not found")
+
+
+    ''''''''''''''''''' DEFECT DETECTION '''''''''''''''''''
+    # First check if the blob is present in the frame
+    d = 0
+    if (blob.detected == True):
+        print("**Im here**")
 
         try :
-            state, ball_outline, ball_area = contour_detection(edged_img)
-            if state == 0 :
-                print("Found the ball")
-                ball.outline = ball_outline
-                ball.area = ball_area
-                ball_img = crop_frame(gray_img, ball.outline)
-        except :
-            print("Ball not found")
-            exit()
-
-
-        ''''''''''''''''''' INNER CIRCLE DETECTION '''''''''''''''''''
-        # Find the center of the cropped ball image
-        cX = ball_img.shape[0] // 2
-        cY = ball_img.shape[1] // 2
-
-        # Create a white circle with black background
-        circle_img1 = np.zeros((ball_img.shape[0], ball_img.shape[1]), np.uint8)
-        cv2.circle(circle_img1, (cX, cY), cX-10, (255, 255, 255), 12)
-        # Create a circle image with thinner outline
-        circle_img2 = np.zeros((ball_img.shape[0], ball_img.shape[1]), np.uint8)
-        cv2.circle(circle_img2, (cX, cY), cX-10, (255, 255, 255), 1)
-
-        # Detect the circle countour
-        inner_circle = InnerCircle(None, None, False)
-        state, circle_outline, circle_area = contour_detection(circle_img2)
-        if state == 1:
-            print("Found the inner circle")
-            inner_circle.outline = circle_outline
-            inner_circle.area = circle_area
-            test_img = ball_img.copy()
-            cv2.drawContours(test_img, [inner_circle.outline], 0, (0, 0, 0), 3)
-
-        # Detect the small circle countour
-        small_circle = SmallCircle(None, None, False)
-        state, circle_outline, circle_area = contour_detection(circle_img1)
-        if state == 2:
-            print("Found the small circle")
-            small_circle.outline = circle_outline
-            small_circle.area = circle_area
-            #test_img = ball_img.copy()
-            cv2.drawContours(test_img, [small_circle.outline], 0, (0, 0, 0), 3)
-
-
-        ''''''''''''''''''' BLOB DETECTION '''''''''''''''''''
-        # Send the contour image through a averaging filter to merge the pixels
-        avg_img = average_frame(ball_img, 10)
-        for i in range(15):
-            avg_img = average_frame(avg_img, 5)
-
-        # Convert the blurry frame to bianry
-        binary_img = threshold_frame(avg_img, 220) #230
-
-        # Combine the circle image and the binary image
-        combined_img = cv2.bitwise_or(binary_img, circle_img1)
-
-        # Edge detection and contour detection on the binary image
-        edged_img = edge_detection(combined_img)
-        try:
-            state, blob_outline, blob_area = contour_detection(edged_img)
-            if (state == 3):
-                print("Found the blob")
-                blob.outline = blob_outline
-                blob.area = blob_area
+            state, defect_outline, defect_area = contour_detection(edged_img)
+            if state == 4 :
+                print("Found a defect")
+                d = 1
+                defect = Defect(defect_outline, defect_area)
                 #test_img = ball_img.copy()
-                cv2.drawContours(test_img, [blob.outline], 0, (0, 0, 0), 3)
-        except:
-            print("Blob not found")
+                cv2.drawContours(test_img, [defect.outline], 0, (255, 0, 255), 3)
+        except :
+            print("No defects found")
+        
+
+    # If the blob is not present, then check for defects without blur and merge
+    else:
+        try :
+            state, defect_outline, defect_area = contour_detection(edged_img)
+            if state == 4 :
+                print("Found a defect")
+                d = 1
+                defect = Defect(defect_outline, defect_area)
+                #test_img = ball_img.copy()
+                cv2.drawContours(test_img, [defect.outline], 0, (255, 0, 255), 3)
+        except :
+            print("No defects found")
+
+    return test_img, d
 
 
-        ''''''''''''''''''' DEFECT DETECTION '''''''''''''''''''
-        # First check if the blob is present in the frame
-        if (blob.detected == True):
-            print("**Im here**")
-
-            try :
-                state, defect_outline, defect_area = contour_detection(edged_img)
-                if state == 4 :
-                    print("Found a defect")
-                    defect = Defect(defect_outline, defect_area)
-                    test_img = ball_img.copy()
-                    cv2.drawContours(test_img, [defect.outline], 0, (0, 0, 0), 3)
-                    #cv2.ellipse(test_img, defect.outline, (0, 0, 0), 3)
-            except :
-                print("No defects found")
-            
-
-        # If the blob is not present, then check for defects without blur and merge
+''''''''''''''''''' MAIN FUNCTION '''''''''''''''''''
+# Connect to the camera and get a frame
+count = 0
+ball = Ball(None, None, None, None, None, False)
+blob = Blob(None, None, False)
+cap = connect_camera()
+while cap.isOpened():
+    ret, frame = cap.read()
+    frame_copy =  frame.copy()
+    count = count + 1
+    print("Count: ", count)
+    if ret:
+        ball = Ball(None, None, None, None, None, False)
+        blob = Blob(None, None, False)
+        ball_img = detect_ball(frame)
+        if (ball_img is not None):
+            test_img, defect = analyze_frame(ball_img, ball, blob)
+        else :
+            continue
+        print("defect value: ", defect)
+        #cv2.imshow('frame', test_img)
+        if defect == 1:
+            break
         else:
-            defect_binary_img = threshold_frame(ball_img, 190)
-            edged_img = edge_detection(defect_binary_img)
-            try :
-                state, defect_outline, defect_area = contour_detection(edged_img)
-                if state == 4 :
-                    print("Found a defect")
-                    defect = Defect(defect_outline, defect_area)
-                    #test_img = ball_img.copy()
-                    cv2.drawContours(test_img, [defect.outline], 0, (0, 0, 0), 3)
-            except :
-                print("No defects found")
+            cv2.imshow('frame', test_img)
+            cv2.waitKey(1)
+        # Add a 100ms delay
+        time.sleep(0.1)
     else:
         break
 
+cv2.imshow('frame', test_img)
+cv2.waitKey(0)
 cap.release()
 cv2.destroyAllWindows()

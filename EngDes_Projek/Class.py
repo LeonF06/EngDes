@@ -7,9 +7,10 @@
         self.detected = detected'''
 
 class Ball:
-    def __init__(self, center, radius, area, colour, detected):
+    def __init__(self, center, radius, outline, area, colour, detected):
         self.center = center
         self.radius = radius
+        self.outline = outline
         self.area = area
         self.colour = colour
         self.detected = detected
