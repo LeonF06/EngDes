@@ -139,7 +139,7 @@ def is_orange(frame):
         return False
 
 # Function to detect the ball
-def detect_ball(frame) :
+def detect_ball(frame, run) :
 
     # Determine wether the ball is orange or white
     ball.colour = is_orange(frame)
@@ -164,14 +164,7 @@ def detect_ball(frame) :
             ball.radius = int(radius)
 
             ball.area = ball_area
-            #ball_img = crop_frame(gray_img, ball.outline)
             ball_img = cv2.circle(frame, ball.center, ball.radius, (0,255,0), 2)
-
-            serialcomm.write("run".encode('utf-8'))
-            #time.sleep(0.5)
-            #petrus
-            serialcomm.close
-
             return ball_img
         else :
             return None
@@ -250,7 +243,6 @@ def analyze_frame(ball_img, ball, blob):
                 print("Found a defect")
                 d = 1
                 defect = Defect(defect_outline, defect_area)
-                #test_img = ball_img.copy()
                 cv2.drawContours(test_img, [defect.outline], 0, (255, 0, 255), 3)
         except :
             print("No defects found")
@@ -264,7 +256,6 @@ def analyze_frame(ball_img, ball, blob):
                 print("Found a defect")
                 d = 1
                 defect = Defect(defect_outline, defect_area)
-                #test_img = ball_img.copy()
                 cv2.drawContours(test_img, [defect.outline], 0, (255, 0, 255), 3)
         except :
             print("No defects found")
@@ -274,32 +265,35 @@ def analyze_frame(ball_img, ball, blob):
 
 ''''''''''''''''''' MAIN FUNCTION '''''''''''''''''''
 # Connect to the camera and get a frame
-count = 0
 ball = Ball(None, None, None, None, None, False)
 blob = Blob(None, None, False)
 cap = connect_camera()
-serialcomm = serial.Serial('COM3', 9600)
+serialcomm = serial.Serial('COM5', 9600)
+run = True
 #serialcomm.timeout = 1
 
 while cap.isOpened():
     ret, frame = cap.read()
     frame_copy =  frame.copy()
-    count = count + 1
-    print("Count: ", count)
     if ret:
         ball = Ball(None, None, None, None, None, False)
         blob = Blob(None, None, False)
-        ball_img = detect_ball(frame)
+        
+        ball_img = detect_ball(frame, run)
         if (ball_img is not None):
             test_img, defect = analyze_frame(ball_img, ball, blob)
+            if (run == True) :
+                serialcomm.write("run".encode('utf-8'))
+                time.sleep(0.5)
+                #serialcomm.close
+                run = False
         else :
             continue
-        print("defect value: ", defect)
-        #cv2.imshow('frame', test_img)
+
         if defect == 1:
             serialcomm.write("def".encode('utf-8'))
-            #time.sleep(0.5)
-            serialcomm.close
+            time.sleep(0.5)
+            #serialcomm.close
             break
         else:
             cv2.imshow('frame', test_img)
