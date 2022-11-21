@@ -65,12 +65,12 @@ def contour_detection(edge):
             print("Not ball contour")
             return None, None, None
         # Blob is detected
-        elif (blob.detected == False and contour_area > 33000 and contour_area < 65000):
+        elif (blob.detected == False and contour_area > 32000 and contour_area < 65000):
             print("blob contour")
             blob.detected = True
             return 3, approx, contour_area
         # Defect is detected
-        elif (contour_area > 5 and contour_area < 33000 and is_closed(c) == True):
+        elif (contour_area > 5 and contour_area < 32000 and is_closed(c) == True):
             #ellipse = cv2.fitEllipse(c)
             print("defect contour")
             if (intersect(ball.outline, c) == False):
@@ -196,7 +196,7 @@ ball_mask_img = mask_ball(gray_img, ball.center, ball.radius)
 ball_img = ball_mask_img.copy()
 
 # Make a white circle around the ball
-cv2.circle(ball_img, ball.center, ball.radius-1, (255,255,255), 10)
+cv2.circle(ball_img, ball.center, ball.radius-1, (255,255,255), 15)
 # Add contrast to the image
 ball_img = cv2.addWeighted(ball_img, 2, ball_img, 0, 0)
 
@@ -207,7 +207,7 @@ if (ball.colour == "White") :
 
     for i in range(25):
         avg_img = average_frame(avg_img, 3)
-        avg_img = threshold_frame(avg_img, 150) #230
+        avg_img = threshold_frame(avg_img, 140) #230
 # Orange
 else:
     avg_img = average_frame(ball_img, 18)

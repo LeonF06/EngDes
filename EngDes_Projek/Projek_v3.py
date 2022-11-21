@@ -203,15 +203,15 @@ def analyze_frame(ball_img, ball, blob):
 
         for i in range(25):
             avg_img = average_frame(avg_img, 3)
-            avg_img = threshold_frame(avg_img, 150) #230
+            avg_img = threshold_frame(avg_img, 140) #230
     # Orange
     else:
-        avg_img = average_frame(ball_img, 18)
+        avg_img = average_frame(ball_img, 20)
         avg_img = cv2.equalizeHist(avg_img)
 
         for i in range(70):
             avg_img = average_frame(avg_img, 3)
-            avg_img = threshold_frame(avg_img, 170) #230
+            avg_img = threshold_frame(avg_img, 160) #230
 
     binary_img = avg_img.copy()
 
@@ -268,9 +268,12 @@ def analyze_frame(ball_img, ball, blob):
 ball = Ball(None, None, None, None, None, False)
 blob = Blob(None, None, False)
 cap = connect_camera()
-serialcomm = serial.Serial('COM5', 9600)
+serialcomm = serial.Serial('COM6', 9600)
 run = True
-#serialcomm.timeout = 1
+#enter = False
+stop = 0
+data = '0'
+serialcomm.timeout = 3
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -278,26 +281,46 @@ while cap.isOpened():
     if ret:
         ball = Ball(None, None, None, None, None, False)
         blob = Blob(None, None, False)
-        
-        ball_img = detect_ball(frame, run)
-        if (ball_img is not None):
-            test_img, defect = analyze_frame(ball_img, ball, blob)
-            if (run == True) :
-                serialcomm.write("run".encode('utf-8'))
-                time.sleep(0.5)
-                #serialcomm.close
-                run = False
-        else :
-            continue
 
+        if stop == 0:
+            ball_img = detect_ball(frame, run)
+            if (ball_img is not None):
+                test_img, defect = analyze_frame(ball_img, ball, blob)
+                if (run == True) :
+                    serialcomm.write("run".encode('utf-8'))
+                    print("--------------------Serial write 'run' sent--------------------")
+                    run = False
+            else :
+                continue
+
+        print("defect: ", defect)
         if defect == 1:
             serialcomm.write("def".encode('utf-8'))
-            time.sleep(0.5)
-            #serialcomm.close
-            break
+            print("--------------------Serial write 'def' sent---------------------")
+            time.sleep(0.5)  
+            data = serialcomm.readline().decode('ascii')
+            print("----------------Data defect------------------", data)
+            
+            run = True
+            print("Place new ball on roller...")
+            data = '0'
+            time.sleep(10)
+            stop = 0
         else:
-            cv2.imshow('frame', test_img)
-            cv2.waitKey(1)
+            # try to search for end statement
+            try:
+                data = serialcomm.readline().decode('ascii')
+                print("----------------Data no defect------------------", data)
+                if data == 'end':
+                    run = True
+                    print("Place new ball on roller...")
+                    data = '0'
+                    time.sleep(10)
+            except:
+                continue
+
+        cv2.imshow('frame', test_img)
+        cv2.waitKey(1)
         # Add a 100ms delay
         time.sleep(0.1)
     else:
