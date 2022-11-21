@@ -1,11 +1,12 @@
 import cv2
 import imutils
-import sys
 import numpy as np
 from matplotlib import pyplot as plt
 from Class import *
 import time
 import serial
+import logging
+import threading
 
 
 # Connect to camera
@@ -66,12 +67,12 @@ def contour_detection(edge):
                 print("Not ball contour")
                 return None, None, None
         # Blob is detected
-        elif (blob.detected == False and contour_area > 20000 and contour_area < 65000):
+        elif (blob.detected == False and contour_area > 20000 and contour_area < 65000 and is_closed(c) == True):
             print("blob contour")
             blob.detected = True
             return 3, approx, contour_area
         # Defect is detected
-        elif (contour_area > 100 and contour_area < 20000 and is_closed(c) == True):
+        elif (contour_area > 2000 and contour_area < 20000 and is_closed(c) == True):
             #ellipse = cv2.fitEllipse(c)
             print("defect contour")
             if (intersect(ball.outline, c) == False):
@@ -201,17 +202,18 @@ def analyze_frame(ball_img, ball, blob):
         avg_img = average_frame(ball_img, 20)
         avg_img = cv2.equalizeHist(avg_img)
 
-        for i in range(25):
-            avg_img = average_frame(avg_img, 3)
+        for i in range(15):
+            avg_img = average_frame(avg_img, 6)
             avg_img = threshold_frame(avg_img, 140) #230
     # Orange
     else:
         avg_img = average_frame(ball_img, 20)
         avg_img = cv2.equalizeHist(avg_img)
 
-        for i in range(70):
-            avg_img = average_frame(avg_img, 3)
+        for i in range(15):
+            avg_img = average_frame(avg_img, 7)
             avg_img = threshold_frame(avg_img, 160) #230
+
 
     binary_img = avg_img.copy()
 
@@ -270,10 +272,9 @@ blob = Blob(None, None, False)
 cap = connect_camera()
 serialcomm = serial.Serial('COM6', 9600)
 run = True
-#enter = False
-stop = 0
 data = '0'
-serialcomm.timeout = 3
+serialcomm.timeout = 0.5
+count = 0
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -281,31 +282,38 @@ while cap.isOpened():
     if ret:
         ball = Ball(None, None, None, None, None, False)
         blob = Blob(None, None, False)
+        count = count + 1
+        print("---------------------------------->>> Count = ", count)
+        ball_img = detect_ball(frame, run)
+        if (ball_img is not None):
+            test_img, defect = analyze_frame(ball_img, ball, blob)
+            if (run == True) :
+                serialcomm.write("run".encode('utf-8'))
+                print("--------------------Serial write 'run' sent--------------------")
+                run = False
+            cv2.imshow('frame', test_img)
+            cv2.waitKey(1)
+        else :
+            cv2.imshow('frame', frame_copy)
+            cv2.waitKey(1)
+            continue
 
-        if stop == 0:
-            ball_img = detect_ball(frame, run)
-            if (ball_img is not None):
-                test_img, defect = analyze_frame(ball_img, ball, blob)
-                if (run == True) :
-                    serialcomm.write("run".encode('utf-8'))
-                    print("--------------------Serial write 'run' sent--------------------")
-                    run = False
-            else :
-                continue
+        
 
         print("defect: ", defect)
         if defect == 1:
             serialcomm.write("def".encode('utf-8'))
             print("--------------------Serial write 'def' sent---------------------")
-            time.sleep(0.5)  
+            #time.sleep(0.5)  
             data = serialcomm.readline().decode('ascii')
             print("----------------Data defect------------------", data)
             
             run = True
             print("Place new ball on roller...")
             data = '0'
-            time.sleep(10)
-            stop = 0
+            cv2.imshow('frame', test_img)
+            cv2.waitKey(1)
+            time.sleep(15)
         else:
             # try to search for end statement
             try:
@@ -315,16 +323,20 @@ while cap.isOpened():
                     run = True
                     print("Place new ball on roller...")
                     data = '0'
-                    time.sleep(10)
+                    time.sleep(4)
+                    
+                    ret, frame = cap.read()
+                    cv2.imshow('frame', frame)
+                    cv2.waitKey(1)
+                    time.sleep(11)
             except:
                 continue
-
-        cv2.imshow('frame', test_img)
-        cv2.waitKey(1)
         # Add a 100ms delay
         time.sleep(0.1)
     else:
         break
+
+
 
 cv2.imshow('frame', test_img)
 cv2.waitKey(0)

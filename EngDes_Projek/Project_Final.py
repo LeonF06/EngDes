@@ -65,12 +65,12 @@ def contour_detection(edge):
             print("Not ball contour")
             return None, None, None
         # Blob is detected
-        elif (blob.detected == False and contour_area > 32000 and contour_area < 65000):
+        elif (blob.detected == False and contour_area > 20000 and contour_area < 65000):
             print("blob contour")
             blob.detected = True
             return 3, approx, contour_area
         # Defect is detected
-        elif (contour_area > 5 and contour_area < 32000 and is_closed(c) == True):
+        elif (contour_area > 5 and contour_area < 20000 and is_closed(c) == True):
             #ellipse = cv2.fitEllipse(c)
             print("defect contour")
             if (intersect(ball.outline, c) == False):
@@ -202,19 +202,19 @@ ball_img = cv2.addWeighted(ball_img, 2, ball_img, 0, 0)
 
 # Send the contour image through a averaging filter to merge the pixels
 if (ball.colour == "White") :
-    avg_img = average_frame(ball_img, 18)
+    avg_img = average_frame(ball_img, 20)
     avg_img = cv2.equalizeHist(avg_img)
 
-    for i in range(25):
-        avg_img = average_frame(avg_img, 3)
+    for i in range(15):
+        avg_img = average_frame(avg_img, 6)
         avg_img = threshold_frame(avg_img, 140) #230
 # Orange
 else:
-    avg_img = average_frame(ball_img, 18)
+    avg_img = average_frame(ball_img, 20)
     avg_img = cv2.equalizeHist(avg_img)
 
-    for i in range(70):
-        avg_img = average_frame(avg_img, 3)
+    for i in range(15):
+        avg_img = average_frame(avg_img, 7)
         avg_img = threshold_frame(avg_img, 160) #230
 
 binary_img = avg_img.copy()
@@ -268,7 +268,7 @@ else:
 
 
 
-cv2.imshow('frame', test_img)
+cv2.imshow('frame', binary_img)
 cv2.waitKey(0)
 cap.release()
 cv2.destroyAllWindows()
