@@ -271,9 +271,22 @@ def stop():
     global running
     running = False
 
+    serialcomm.write("def".encode('utf-8'))
+    amber_Label.place_forget()
+    green_Label.place(x=230,y=50)
+
+    pprint(output)
+
+    e.delete(0, END)
+    for x in output:
+        #e.insert(0, "Output Queue: ")
+        e.insert(END,x)
+
 def start():
     global begin
     begin = True
+    global running
+    running = True
 
 def lights():
     serialcomm.write("lights".encode('utf-8'))
@@ -294,6 +307,11 @@ serialcomm.timeout = 0.5
 count = 0
 seconds = 15
 
+global begin
+begin = False
+global running
+running = False
+
 root = Tk()
 root.title("Optical Inspection")
 root.geometry('640x800')
@@ -301,13 +319,13 @@ root.geometry('640x800')
 canvas = Canvas(root, width=cap_width, height=cap_height)
 canvas.place(x=0,y=300)
 
-green = PhotoImage(file='EngDes_Projek\light_green.png')
+green = PhotoImage(file='EngDes_ProjekCommit\light_green.png')
 green_Label = Label(image=green)
 green_Label.place(x=230,y=50)
 
-amber = PhotoImage(file='EngDes_Projek\light_amber.png')
+amber = PhotoImage(file='EngDes_ProjekCommit\light_amber.png')
 amber_Label = Label(image=amber)
-red = PhotoImage(file='EngDes_Projek\light_red.png')
+red = PhotoImage(file='EngDes_ProjekCommit\light_red.png')
 red_Label = Label(image=red)
 
 button_stop = Button(root, text="Stop", command=stop, bg="red",padx=40,pady=5)
@@ -325,14 +343,25 @@ e.place(x=170,y=260)
 root.update_idletasks()
 root.update()
 
-if cap.isOpened():
-    global running
-    running = True
+output = []
 
-while running:
+'''if cap.isOpened():
+    global running
+    running = True'''
+
+while begin == False:
     ret, frame = cap.read()
     frame_copy =  frame.copy()
-    output = []
+
+    frame_copy = cv2.cvtColor(frame_copy, cv2.COLOR_BGR2RGB)
+    photo = ImageTk.PhotoImage(image = Image.fromarray(frame_copy))
+    canvas.create_image(0, 0, image = photo, anchor=NW)
+    root.update_idletasks()
+    root.update()
+
+while cap.isOpened() and begin == True:
+    ret, frame = cap.read()
+    frame_copy =  frame.copy()
 
     frame_copy = cv2.cvtColor(frame_copy, cv2.COLOR_BGR2RGB)
     photo = ImageTk.PhotoImage(image = Image.fromarray(frame_copy))
@@ -351,7 +380,7 @@ while running:
         if (ball_img is not None):
             test_img, defect = analyze_frame(ball_img, ball, blob)
             test_img = cv2.cvtColor(test_img, cv2.COLOR_BGR2RGB)
-            if (run == True) :
+            if (run == True and defect == 0) :
                 green_Label.place_forget()
                 amber_Label.place(x=230,y=50)
                 serialcomm.write("run".encode('utf-8'))
@@ -368,10 +397,22 @@ while running:
 
         print("defect: ", defect)
         if defect == 1:
+            # add a 1 delay
+            end_time = time.time() + 0.5
+            while time.time() < end_time:
+                root.update_idletasks()
+                root.update()
+            end_time = 0
+
             serialcomm.write("def".encode('utf-8'))
             print("--------------------Serial write 'def' sent---------------------")
-            #time.sleep(0.5)  
-            data = serialcomm.readline().decode('ascii')
+            #time.sleep(0.5) 
+            while (data  != 'end'):
+                try : 
+                    data = serialcomm.readline().decode('ascii')
+                except:
+                    continue
+            
             print("----------------Data defect------------------", data)
             
             run = True
@@ -388,14 +429,30 @@ while running:
             canvas.create_image(0, 0, image = photo, anchor=NW)
             #root.update_idletasks()
             #root.update()
+            #cv2.VideoCapture.clear(cap)
+            cv2.VideoCapture.release(cap)
+            frame = None
+            cap = connect_camera()
+            ret, frame = cap.read()
+            running = True
 
             end_time = time.time() + seconds
             while time.time() < end_time:
+                '''ret, frame = cap.read()
+                frame_copy =  frame.copy()
+                frame_copy = cv2.cvtColor(frame_copy, cv2.COLOR_BGR2RGB)
+                photo = ImageTk.PhotoImage(image = Image.fromarray(frame_copy))
+                canvas.create_image(0, 0, image = photo, anchor=NW)'''
+                #ret, frame = cap.read()
                 root.update_idletasks()
                 root.update()
 
+                if running == False:
+                    break
+            end_time = 0
+
             #time.sleep(15)
-        else:
+        elif defect == 0:
             # try to search for end statement
             try:
                 data = serialcomm.readline().decode('ascii')
@@ -426,17 +483,35 @@ while running:
                         root.update_idletasks()
                         root.update()
 
+                        if running == False:
+                            break
+                    end_time = 0
                     #time.sleep(15)
             except:
                 continue
         # Add a 100ms delay
-        time.sleep(0.1)
+        '''end_time = time.time() + 0.5
+        while time.time() < end_time:
+            root.update_idletasks()
+            root.update()
+        end_time = 0'''
     else:
         break
-    #root.update_idletasks()
-    #root.update()
 
-serialcomm.write("def".encode('utf-8'))
+    while running == False:
+        data = '0'
+        ret, frame = cap.read()
+        frame_copy =  frame.copy()
+
+        frame_copy = cv2.cvtColor(frame_copy, cv2.COLOR_BGR2RGB)
+        photo = ImageTk.PhotoImage(image = Image.fromarray(frame_copy))
+        canvas.create_image(0, 0, image = photo, anchor=NW)
+        root.update_idletasks()
+        root.update()
+
+
+
+'''serialcomm.write("def".encode('utf-8'))
 amber_Label.place_forget()
 green_Label.place(x=230,y=50)
 
@@ -444,11 +519,12 @@ pprint(output)
 
 e.delete(0, END)
 for x in output:
-    e.insert(0, x)
+    e.insert(0, "Output Queue: ")
+    e.insert(END,x + " ")'''
 
-cap.release()
-serialcomm.close()
+#cap.release()
+#serialcomm.close()
 
-while True:
+'''while True:
     root.update_idletasks()
-    root.update()
+    root.update()'''
