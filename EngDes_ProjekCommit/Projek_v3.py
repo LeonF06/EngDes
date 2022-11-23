@@ -58,13 +58,13 @@ def contour_detection(edge):
         print(" Area: ", contour_area, " Length: ", len(c))
 
         # Ball is detected
-        if (ball.detected == False and contour_area > 140000):
+        if (ball.detected == False and contour_area > 130000):
             print("Ball contour")
             ball.detected = True
             #cv2.drawContours(img_copy, [approx], 0, (255, 0, 255), 3)
             return 0, approx, contour_area
         # Ball is not found
-        elif (ball.detected == False and contour_area < 140000):
+        elif (ball.detected == False and contour_area < 130000):
                 print("Not ball contour")
                 return None, None, None
         # Blob is detected
@@ -73,7 +73,7 @@ def contour_detection(edge):
             blob.detected = True
             return 3, approx, contour_area
         # Defect is detected
-        elif (contour_area > 2000 and contour_area < 20000 and is_closed(c) == True):
+        elif (contour_area > 2200 and contour_area < 20000 and is_closed(c) == True):
             #ellipse = cv2.fitEllipse(c)
             print("defect contour")
             if (intersect(ball.outline, c) == False):
@@ -150,7 +150,7 @@ def detect_ball(frame, run) :
     ''''''''''''''''''' BALL DETECTION '''''''''''''''''''
     # Convert the frame to grayscale and then to binary
     gray_img = convert_to_grayscale(frame)
-    thresh_img = threshold_frame(gray_img, 130) #190
+    thresh_img = threshold_frame(gray_img, 150) #130
 
     # Blur the frame and then perform edge detection
     blur_img = blur_frame(thresh_img, 3)
@@ -201,20 +201,20 @@ def analyze_frame(ball_img, ball, blob):
 
     # Send the contour image through a averaging filter to merge the pixels
     if (ball.colour == "White") :
-        avg_img = average_frame(ball_img, 20)
-        avg_img = cv2.equalizeHist(avg_img)
-
-        for i in range(15):
-            avg_img = average_frame(avg_img, 6)
-            avg_img = threshold_frame(avg_img, 140) #230
-    # Orange
-    else:
-        avg_img = average_frame(ball_img, 20)
+        avg_img = average_frame(ball_img, 25)
         avg_img = cv2.equalizeHist(avg_img)
 
         for i in range(15):
             avg_img = average_frame(avg_img, 7)
             avg_img = threshold_frame(avg_img, 160) #230
+    # Orange
+    else:
+        avg_img = average_frame(ball_img, 26)
+        avg_img = cv2.equalizeHist(avg_img)
+
+        for i in range(18):
+            avg_img = average_frame(avg_img, 8)
+            avg_img = threshold_frame(avg_img, 170) #230
 
 
     binary_img = avg_img.copy()
@@ -270,8 +270,22 @@ def analyze_frame(ball_img, ball, blob):
 def stop():
     global running
     running = False
+    global data
 
     serialcomm.write("def".encode('utf-8'))
+    print("--------------------Serial write 'def' sent wait for end---------------------")
+    while (data  != 'end'):
+        try : 
+            data = serialcomm.readline().decode('ascii')
+        except:
+            continue
+    data = '0'
+
+    # combine list into string
+    queue = ''.join(map(str, output))
+    queue = bytes(queue, 'utf-8')
+    serialoutput.write(queue)
+
     amber_Label.place_forget()
     green_Label.place(x=230,y=50)
 
@@ -279,7 +293,6 @@ def stop():
 
     e.delete(0, END)
     for x in output:
-        #e.insert(0, "Output Queue: ")
         e.insert(END,x)
 
 def start():
@@ -287,6 +300,14 @@ def start():
     begin = True
     global running
     running = True
+    global data
+    data = '0'
+    global run
+    run = True
+
+    e.delete(0, END)
+    global output
+    output = []
 
 def lights():
     serialcomm.write("lights".encode('utf-8'))
@@ -301,11 +322,15 @@ cap_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
 cap_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
 serialcomm = serial.Serial('COM3', 9600)
+serialcomm.timeout = 0
+serialoutput = serial.Serial('COM4', 9600)
+serialoutput.timeout = 0
 run = True
+global data
 data = '0'
-serialcomm.timeout = 0.5
 count = 0
 seconds = 15
+flag = 0
 
 global begin
 begin = False
@@ -321,21 +346,18 @@ canvas.place(x=0,y=300)
 
 green = PhotoImage(file='EngDes_ProjekCommit\light_green.png')
 green_Label = Label(image=green)
-green_Label.place(x=230,y=50)
 
 amber = PhotoImage(file='EngDes_ProjekCommit\light_amber.png')
 amber_Label = Label(image=amber)
+
 red = PhotoImage(file='EngDes_ProjekCommit\light_red.png')
 red_Label = Label(image=red)
 
 button_stop = Button(root, text="Stop", command=stop, bg="red",padx=40,pady=5)
-button_stop.place(x=530,y=0)
 
 button_start = Button(root, text="Start", command=start, bg="green",padx=40,pady=5)
-button_start.place(x=0,y=0)
 
 button_lights = Button(root, text="Lights", command=lights, bg="blue",padx=40,pady=5)
-button_lights.place(x=260,y=0)
 
 e = Entry(root, width=50)
 e.place(x=170,y=260)
@@ -343,11 +365,21 @@ e.place(x=170,y=260)
 root.update_idletasks()
 root.update()
 
+global output
 output = []
 
-'''if cap.isOpened():
-    global running
-    running = True'''
+end_time = time.time() + 2
+while time.time() < end_time:
+    ret, frame = cap.read()
+    frame_copy =  frame.copy()
+
+    frame_copy = cv2.cvtColor(frame_copy, cv2.COLOR_BGR2RGB)
+    photo = ImageTk.PhotoImage(image = Image.fromarray(frame_copy))
+    canvas.create_image(0, 0, image = photo, anchor=NW)
+
+    root.update_idletasks()
+    root.update()
+end_time = 0
 
 while begin == False:
     ret, frame = cap.read()
@@ -356,8 +388,31 @@ while begin == False:
     frame_copy = cv2.cvtColor(frame_copy, cv2.COLOR_BGR2RGB)
     photo = ImageTk.PhotoImage(image = Image.fromarray(frame_copy))
     canvas.create_image(0, 0, image = photo, anchor=NW)
+
+    if flag == 0:
+        serialcomm.write("run".encode('utf-8'))
+        e.insert(0, "Diagnostics running...")
+        red_Label.place(x=230,y=50)
+        flag = 1
+    
+    try : 
+        data = serialcomm.readline().decode('ascii')
+        if data == 'end':
+            e.delete(0, END)
+            e.insert(0, "Idle")
+            red_Label.place_forget()
+            green_Label.place(x=230,y=50)
+
+            button_stop.place(x=530,y=0)
+            button_start.place(x=0,y=0)
+            button_lights.place(x=260,y=0)
+    except:
+        continue
+
     root.update_idletasks()
     root.update()
+
+#serialcomm.timeout = 0.5
 
 while cap.isOpened() and begin == True:
     ret, frame = cap.read()
@@ -414,7 +469,7 @@ while cap.isOpened() and begin == True:
                     continue
             
             print("----------------Data defect------------------", data)
-            
+
             run = True
             print("Place new ball on roller...")
             data = '0'
@@ -430,11 +485,8 @@ while cap.isOpened() and begin == True:
             #root.update_idletasks()
             #root.update()
             #cv2.VideoCapture.clear(cap)
-            cv2.VideoCapture.release(cap)
-            frame = None
-            cap = connect_camera()
-            ret, frame = cap.read()
-            running = True
+            
+            #running = True
 
             end_time = time.time() + seconds
             while time.time() < end_time:
@@ -449,6 +501,11 @@ while cap.isOpened() and begin == True:
 
                 if running == False:
                     break
+
+            cv2.VideoCapture.release(cap)
+            frame = None
+            cap = connect_camera()
+            ret, frame = cap.read()
             end_time = 0
 
             #time.sleep(15)
@@ -499,7 +556,6 @@ while cap.isOpened() and begin == True:
         break
 
     while running == False:
-        data = '0'
         ret, frame = cap.read()
         frame_copy =  frame.copy()
 
